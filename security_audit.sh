@@ -27,19 +27,20 @@ check_weak_passwords() {
 # Function to scan for world-writable files
 check_world_writable_files() {
     echo "Scanning for world-writable files:"
-    find / -xdev -type f -perm -0002 -exec ls -l {} \;
+    find / -xdev -type f -perm -0002 ! -path "/proc/*" ! -path "/sys/*" -exec ls -l {} \; 2>/dev/null
 }
 
 # Function to check .ssh directory permissions
 check_ssh_permissions() {
     echo "Checking .ssh directory permissions:"
-    find /home -type d -name ".ssh" -exec chmod 700 {} \;
+    find /home -type d -name ".ssh" -exec chmod 700 {} \; -exec ls -ld {} \;
+    find /home -type f -name "authorized_keys" -exec chmod 600 {} \;
 }
 
 # Function to report SUID/SGID files
 check_suid_sgid_files() {
     echo "Checking for SUID/SGID files:"
-    find / -perm /6000 -type f -exec ls -ld {} \;
+    find / -perm /6000 -type f -exec ls -ld {} \; 2>/dev/null
 }
 
 # Function to list all running services
@@ -52,20 +53,26 @@ list_running_services() {
 check_critical_services() {
     echo "Checking critical services:"
     for service in sshd iptables; do
-        systemctl is-active --quiet $service || echo "$service is not running!"
+        systemctl is-active --quiet "$service" || echo "$service is not running!"
     done
 }
 
 # Function to verify firewall status
 check_firewall_status() {
     echo "Checking if the firewall is active:"
-    ufw status || iptables -L
+    if command -v ufw > /dev/null; then
+        ufw status
+    elif command -v iptables > /dev/null; then
+        iptables -L
+    else
+        echo "No firewall command found!"
+    fi
 }
 
 # Function to report open ports
 check_open_ports() {
     echo "Listing open ports:"
-    netstat -tuln
+    netstat -tuln 2>/dev/null
 }
 
 # Function to identify public vs. private IPs
@@ -83,20 +90,36 @@ check_ip_addresses() {
 # Function to check for available security updates
 check_security_updates() {
     echo "Checking for available security updates:"
-    apt update && apt list --upgradable | grep -i security
+    if command -v apt > /dev/null; then
+        apt update && apt list --upgradable 2>/dev/null | grep -i security
+    elif command -v dnf > /dev/null; then
+        dnf updateinfo list available --security
+    elif command -v yum > /dev/null; then
+        yum list updates --security
+    else
+        echo "No compatible package manager found!"
+    fi
 }
 
 # Function to check for suspicious log entries
 check_suspicious_logs() {
     echo "Checking for suspicious log entries:"
-    grep -i "failed" /var/log/auth.log | tail -10
+    if [ -f /var/log/auth.log ]; then
+        grep -i "failed" /var/log/auth.log | tail -10
+    else
+        echo "No auth.log file found!"
+    fi
 }
 
 # Function to harden SSH configuration
 harden_ssh() {
     echo "Hardening SSH configuration:"
-    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
-    systemctl reload sshd
+    if [ -f /etc/ssh/sshd_config ]; then
+        sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
+        systemctl reload sshd
+    else
+        echo "No sshd_config file found!"
+    fi
 }
 
 # Function to disable IPv6
@@ -109,15 +132,26 @@ disable_ipv6() {
 # Function to set a password for GRUB bootloader
 secure_grub() {
     echo "Setting a password for the GRUB bootloader:"
-    grub-mkpasswd-pbkdf2
-    echo "GRUB_PASSWORD setting should be added manually to /etc/grub.d/40_custom"
+    if command -v grub-mkpasswd-pbkdf2 > /dev/null; then
+        grub-mkpasswd-pbkdf2
+        echo "GRUB_PASSWORD setting should be added manually to /etc/grub.d/40_custom"
+    else
+        echo "grub-mkpasswd-pbkdf2 command not found!"
+    fi
 }
 
 # Function to configure automatic updates
 configure_auto_updates() {
     echo "Configuring automatic updates:"
-    apt install unattended-upgrades
-    dpkg-reconfigure --priority=low unattended-upgrades
+    if command -v apt > /dev/null; then
+        apt install -y unattended-upgrades
+        dpkg-reconfigure --priority=low unattended-upgrades
+    elif command -v dnf > /dev/null; then
+        dnf install -y dnf-automatic
+        systemctl enable --now dnf-automatic.timer
+    else
+        echo "No compatible package manager found for automatic updates!"
+    fi
 }
 
 # Function to generate a security audit report
