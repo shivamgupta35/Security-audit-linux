@@ -1,7 +1,7 @@
 # Automating Security Audits and Server Hardening on Linux Servers
 
 ## STEP 1 : Setting up environment 
-- Open amazon console , create a EC2 instance (**proxy-server-manthan**),then connect 
+- Open amazon console , create a EC2 instance (**proxy-server**),then connect 
 - Install git  
 ```
 sudo yum install git -y
